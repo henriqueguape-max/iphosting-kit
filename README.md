@@ -7,13 +7,17 @@ Interface interativa no terminal com menu categorizado, stats ao vivo e log auto
 
 ## Execução rápida (recomendado)
 
-Abra o **PowerShell como Administrador** e execute:
+Abra o **PowerShell** (qualquer janela, sem precisar ser admin) e execute:
 
 ```powershell
-irm https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1 | iex
+$f="$env:TEMP\iphosting.ps1";iwr 'https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1' -OutFile $f -UseBasicParsing;Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$f`"" -Verb RunAs;Start-Sleep 5;Remove-Item $f -ErrorAction SilentlyContinue
 ```
 
-> O script não é salvo no disco. Tudo roda diretamente na memória.
+> O script é baixado para uma pasta temporária, executado e deletado automaticamente.  
+> A janela de confirmação de administrador (UAC) aparece — clique em **Sim**.
+
+### Por que não `irm url | iex`?
+O Windows bloqueia por padrão qualquer script executado direto da memória via `Invoke-Expression`, independente do conteúdo. Isso é uma proteção do **AMSI** (Antimalware Scan Interface). O comando acima contorna isso salvando o arquivo em disco primeiro.
 
 ---
 
