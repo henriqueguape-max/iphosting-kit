@@ -10,7 +10,7 @@ Interface interativa no terminal com menu categorizado, stats ao vivo e log auto
 Abra o **PowerShell como Administrador** e execute:
 
 ```powershell
-irm https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPO/main/ipHosting-Manutencao.ps1 | iex
+irm https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1 | iex
 ```
 
 > O script não é salvo no disco. Tudo roda diretamente na memória.

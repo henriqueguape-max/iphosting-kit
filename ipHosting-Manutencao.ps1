@@ -74,7 +74,7 @@ function Show-Separador {
 # ==============================================================================
 # ADMIN
 # ==============================================================================
-$IPHST_URL = "https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPO/main/ipHosting-Manutencao.ps1"
+$IPHST_URL = "https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1"
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
