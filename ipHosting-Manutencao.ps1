@@ -45,9 +45,27 @@ function Write-Aviso   { param([string]$M) Write-Host "  [AVISO] $M" -Foreground
 function Write-Info    { param([string]$M) Write-Host "  [INFO] $M" -ForegroundColor Cyan;  Write-Log "INFO"  $M }
 
 function Pause-Script {
-    param([string]$Msg = "  Pressione ENTER para continuar...")
+    param([string]$Msg = "  Pressione qualquer tecla para continuar...")
     Write-Host "`n$Msg" -ForegroundColor DarkGray
-    Read-Host | Out-Null
+    $null = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+function Get-Bar {
+    param([int]$Pct, [int]$Width = 10)
+    $filled = [math]::Max(0, [math]::Min($Width, [math]::Round($Pct / 100 * $Width)))
+    $empty  = $Width - $filled
+    $b = ([string][char]0x2588) * $filled + ([string][char]0x2591) * $empty
+    return "[$b] ${Pct}%"
+}
+
+function Test-RebootPending {
+    try {
+        if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") { return $true }
+        if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") { return $true }
+        $pfr = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue
+        if ($pfr) { return $true }
+    } catch {}
+    return $false
 }
 
 function Show-Resumo {
@@ -69,6 +87,22 @@ function Show-Separador {
         Write-Host ""
     }
 }
+
+# ==============================================================================
+# CONFIGURACOES EXTERNAS (.env)
+# ==============================================================================
+function Load-Settings {
+    $path = "$PSScriptRoot\.env"
+    if (Test-Path $path) {
+        Get-Content $path | ForEach-Object {
+            if ($_ -match '=' -and -not $_.StartsWith('#')) {
+                $name, $value = $_.Split('=', 2)
+                Set-Variable -Name $name.Trim() -Value $value.Trim() -Scope Global
+            }
+        }
+    }
+}
+Load-Settings
 
 # ==============================================================================
 # ==============================================================================
@@ -158,29 +192,43 @@ function Show-Menu {
     }
 
     # --- Stats ao vivo ---
-    $s1 = ""; $s2 = ""; $ramPct = 0; $diskPct = 0
+    $ramPct = 0; $diskPct = 0; $upDays = 0
+    $sHost = ""; $sRam = ""; $sDisk = ""; $sUp = ""; $reboot = $false
     try {
         $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
         $cs = Get-CimInstance Win32_ComputerSystem  -ErrorAction SilentlyContinue
         $dk = Get-PSDrive C                         -ErrorAction SilentlyContinue
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+               Where-Object { $_.IPAddress -ne "127.0.0.1" } | Select-Object -First 1).IPAddress
+        $adminStr = if ($isAdmin) { "SIM" } else { "NAO" }
+        $sHost = "  HOST: $env:COMPUTERNAME   IP: $ip   ADMIN: $adminStr"
+
         if ($os -and $cs) {
-            $rTot  = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
-            $rFree = [math]::Round($os.FreePhysicalMemory  / 1MB, 1)
-            $ramPct = [math]::Round((($rTot - $rFree) / $rTot) * 100)
+            $rTot   = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
+            $rUsed  = [math]::Round(($cs.TotalPhysicalMemory - $os.FreePhysicalMemory * 1KB) / 1GB, 1)
+            $ramPct = [math]::Round($rUsed / $rTot * 100)
+            $bar    = Get-Bar $ramPct
+            $sRam   = "  RAM:   $bar  ($rUsed/$rTot GB)"
+
             $up    = (Get-Date) - $os.LastBootUpTime
-            $s1 = "  RAM: ${rFree}/${rTot} GB (${ramPct}% usado)   Uptime: $($up.Days)d $($up.Hours)h $($up.Minutes)min"
+            $upDays = $up.Days
+            $upStr  = "$($up.Days)d $($up.Hours)h $($up.Minutes)min"
+            $upWarn = if ($upDays -gt 30) { "  [!] +30 dias sem reboot" } else { "" }
+            $sUp    = "  Uptime: $upStr$upWarn"
         }
         if ($dk) {
-            $dFree = [math]::Round($dk.Free  / 1GB, 0)
-            $dTot  = [math]::Round(($dk.Used + $dk.Free) / 1GB, 0)
-            $diskPct = [math]::Round(($dk.Used / ($dk.Used + $dk.Free)) * 100)
-            $s2 = "  Disco C: ${dFree}/${dTot} GB  (${diskPct}% usado)"
+            $dTot    = [math]::Round(($dk.Used + $dk.Free) / 1GB, 0)
+            $dUsed   = [math]::Round($dk.Used / 1GB, 0)
+            $diskPct = [math]::Round($dk.Used / ($dk.Used + $dk.Free) * 100)
+            $bar     = Get-Bar $diskPct
+            $sDisk   = "  DISCO: $bar  ($dUsed/$dTot GB)"
         }
+        $reboot = Test-RebootPending
     } catch {}
 
     function StatRow {
-        param([string]$T, [int]$Pct)
-        $cor = if ($Pct -ge 90) { "Red" } elseif ($Pct -ge 75) { "Yellow" } else { "DarkGray" }
+        param([string]$T, [int]$Pct, [int]$Dias = 0)
+        $cor = if ($Pct -ge 90 -or $Dias -gt 30) { "Red" } elseif ($Pct -ge 75 -or $Dias -gt 14) { "Yellow" } else { "DarkGray" }
         $pad = $W - 2 - $T.Length; if ($pad -lt 0) { $pad = 0 }
         Write-Host "  $cv$T$(' ' * $pad)$cv" -ForegroundColor $cor
     }
@@ -189,9 +237,17 @@ function Show-Menu {
     Write-Host "  $tl$HW$tr" -ForegroundColor Cyan
     Row "MENU PRINCIPAL" "White"
     Write-Host "  $ml$HW$mr" -ForegroundColor Cyan
-    if ($s1) { StatRow $s1 $ramPct }
-    if ($s2) { StatRow $s2 $diskPct }
-    if ($s1 -or $s2) { Write-Host "  $ml$HW$mr" -ForegroundColor Cyan }
+    if ($sHost) { StatRow $sHost 0 }
+    Write-Host "  $ml$HW$mr" -ForegroundColor Cyan
+    if ($sRam)  { StatRow $sRam  $ramPct }
+    if ($sDisk) { StatRow $sDisk $diskPct }
+    if ($sUp)   { StatRow $sUp   0 $upDays }
+    if ($reboot) {
+        $rMsg = "  [!] REINICIO PENDENTE — aplique patches antes de continuar"
+        $pad  = $W - 2 - $rMsg.Length; if ($pad -lt 0) { $pad = 0 }
+        Write-Host "  $cv$rMsg$(' ' * $pad)$cv" -ForegroundColor Red
+    }
+    Write-Host "  $ml$HW$mr" -ForegroundColor Cyan
 
     Row ""
     MenuSec "Reparo e Manutencao" "Yellow"
@@ -206,7 +262,8 @@ function Show-Menu {
     Row "  [7]  Backup de Drivers  - Exporta todos os drivers instalados" "Cyan"
     Row ""
     MenuSec "Avancado" "Magenta"
-    Row "  [8]  Manutencao Completa - Limpeza + Rede + Diagnostico (auto)" "Magenta"
+    Row "  [8]  Manutencao Completa         - Limpeza + Rede + Diagnostico" "Magenta"
+    Row "  [A]  Manutencao Completa + Reboot - igual ao [8] e reinicia auto" "Magenta"
     Row "  [9]  Coleta de Logs Profundos para Analise" "Green"
     Row ""
     MenuSec "Sistema" "DarkGray"
@@ -255,6 +312,7 @@ function Invoke-KitReparo {
 # MODULO 2 - LIMPEZA
 # ==============================================================================
 function Invoke-Limpeza {
+    param([switch]$Automatico)
     Show-Separador "MODULO 2 - LIMPEZA E OTIMIZACAO"
     $t0 = Get-Date; $total = 0; Write-Log "INICIO" "Limpeza"
 
@@ -275,7 +333,7 @@ function Invoke-Limpeza {
     $total += LimparPasta "$env:USERPROFILE\AppData\Local\Temp"          "UserTemp"
     $total += LimparPasta "C:\Windows\Prefetch"                          "Prefetch"
 
-    Pause-Script "  Temp/Prefetch OK. ENTER para Lixeira..."
+    if (-not $Automatico) { Pause-Script "  Temp/Prefetch OK. Pressione qualquer tecla para Lixeira..." }
     Write-Info "Esvaziando Lixeira..."
     try {
         $n = (New-Object -ComObject Shell.Application).Namespace(0xA).Items().Count
@@ -283,7 +341,7 @@ function Invoke-Limpeza {
         Write-Success "Lixeira: $n itens removidos."
     } catch { Write-Aviso "Lixeira: $_" }
 
-    Pause-Script "  Lixeira OK. ENTER para Event Logs..."
+    if (-not $Automatico) { Pause-Script "  Lixeira OK. Pressione qualquer tecla para Event Logs..." }
     Write-Info "Limpando logs de eventos..."
     try {
         $logs   = Get-WinEvent -ListLog * -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 }
@@ -295,7 +353,7 @@ function Invoke-Limpeza {
     } catch { Write-Erro "Erro nos logs: $_" }
 
     Show-Resumo "Limpeza" ([int]((Get-Date)-$t0).TotalSeconds) "$([math]::Round($total,2)) MB liberados"
-    Pause-Script
+    if (-not $Automatico) { Pause-Script }
 }
 
 # ==============================================================================
@@ -330,6 +388,7 @@ function Invoke-RepararSpooler {
 # MODULO 4 - REDE
 # ==============================================================================
 function Invoke-RedeSegura {
+    param([switch]$Automatico)
     Show-Separador "MODULO 4 - REDE SAFE MODE"
     $t0 = Get-Date; Write-Log "INICIO" "Rede"
     Write-Aviso "Nenhuma interface sera desativada. RDP/VPN preservados."
@@ -343,7 +402,7 @@ function Invoke-RedeSegura {
     Write-Info "ipconfig /registerdns..."
     try { & ipconfig /registerdns 2>&1 | Out-Null; if ($LASTEXITCODE -eq 0) { Write-Success "DNS registrado." } else { Write-Aviso "Codigo $LASTEXITCODE" } }
     catch { Write-Erro $_ }
-    Pause-Script "  DNS OK. ENTER para Winsock reset..."
+    if (-not $Automatico) { Pause-Script "  DNS OK. Pressione qualquer tecla para Winsock reset..." }
 
     Write-Info "netsh winsock reset..."
     Write-Aviso "Reiniciar a maquina para aplicar."
@@ -351,7 +410,7 @@ function Invoke-RedeSegura {
     catch { Write-Erro $_ }
 
     Show-Resumo "Rede Safe Mode" ([int]((Get-Date)-$t0).TotalSeconds) "Reinicie para aplicar Winsock"
-    Pause-Script
+    if (-not $Automatico) { Pause-Script }
 }
 
 # ==============================================================================
@@ -463,14 +522,16 @@ function Invoke-ManutencaoCompleta {
     Show-Separador "MODULO 8 - MANUTENCAO COMPLETA AUTOMATICA"
     Write-Aviso "Serao executados em sequencia: Limpeza + Rede + Diagnostico"
     Write-Host ""
-    if ((Read-Host "  Confirmar? (S/N)") -notmatch "^[Ss]$") { Write-Aviso "Cancelado."; Pause-Script; return }
+    Write-Host "  Confirmar? (S = Sim / qualquer outra = Cancelar)" -ForegroundColor DarkGray
+    $k = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    if ($k.Character -notin @('s','S')) { Write-Aviso "`n  Cancelado."; Start-Sleep 1; return }
 
     $t0 = Get-Date; Write-Log "INICIO" "Manutencao Completa"
 
     Write-Host "`n  -----[ ETAPA 1/3 - LIMPEZA ]-----" -ForegroundColor Magenta
-    Invoke-Limpeza
+    Invoke-Limpeza -Automatico
     Write-Host "`n  -----[ ETAPA 2/3 - REDE ]-----" -ForegroundColor Magenta
-    Invoke-RedeSegura
+    Invoke-RedeSegura -Automatico
     Write-Host "`n  -----[ ETAPA 3/3 - DIAGNOSTICO ]-----" -ForegroundColor Magenta
     Invoke-DiagnosticoRapido -Silencioso
 
@@ -486,6 +547,44 @@ function Invoke-ManutencaoCompleta {
     Write-Host "  $bl$H71$br" -ForegroundColor Magenta
     Write-Log "RESUMO" "Manutencao Completa em ${seg}s"
     Pause-Script
+}
+
+# ==============================================================================
+# MODULO A - MANUTENCAO COMPLETA + REBOOT
+# ==============================================================================
+function Invoke-ManutencaoComReinicio {
+    Show-Separador "MODULO A - MANUTENCAO COMPLETA + REINICIO AUTOMATICO"
+    Write-Aviso "Serao executados: Limpeza + Rede + Diagnostico e depois o PC reinicia!"
+    Write-Host ""
+    Write-Host "  Salve todos os arquivos antes de confirmar." -ForegroundColor DarkGray
+    Write-Host "  Confirmar? (S = Sim / qualquer outra = Cancelar)" -ForegroundColor DarkGray
+    $k = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    if ($k.Character -notin @('s','S')) { Write-Aviso "`n  Cancelado."; Start-Sleep 1; return }
+
+    $t0 = Get-Date; Write-Log "INICIO" "Manutencao Completa + Reboot"
+
+    Write-Host "`n  -----[ ETAPA 1/3 - LIMPEZA ]-----" -ForegroundColor Magenta
+    Invoke-Limpeza -Automatico
+    Write-Host "`n  -----[ ETAPA 2/3 - REDE ]-----" -ForegroundColor Magenta
+    Invoke-RedeSegura -Automatico
+    Write-Host "`n  -----[ ETAPA 3/3 - DIAGNOSTICO ]-----" -ForegroundColor Magenta
+    Invoke-DiagnosticoRapido -Silencioso
+
+    $seg = [int]((Get-Date)-$t0).TotalSeconds
+    Write-Log "RESUMO" "Manutencao Completa + Reboot em ${seg}s"
+
+    Write-Host ""
+    Write-Host "  $tl$H71$tr" -ForegroundColor Magenta
+    $txt = "CONCLUIDO em ${seg}s — REINICIANDO O COMPUTADOR"
+    $pad = [math]::Floor((71 - $txt.Length) / 2)
+    Write-Host "  $cv$(' ' * $pad)$txt$(' ' * (71 - $pad - $txt.Length))$cv" -ForegroundColor Green
+    Write-Host "  $bl$H71$br" -ForegroundColor Magenta
+
+    Write-Host ""
+    Write-Info "Reiniciando em 5 segundos..."
+    Write-Log "ACAO" "Reinicio automatico apos Manutencao Completa"
+    1..5 | ForEach-Object { Write-Host "  $_..." -ForegroundColor Yellow; Start-Sleep 1 }
+    Restart-Computer -Force
 }
 
 # ==============================================================================
@@ -760,7 +859,11 @@ do {
     Show-Banner
     Show-Menu
 
-    $op = (Read-Host "  Opcao").Trim()
+    Write-Host "  Opcao: " -ForegroundColor White -NoNewline
+    $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $op  = [string]$key.Character
+    Write-Host $op.ToUpper() -ForegroundColor Cyan
+    Write-Host ""
 
     switch ($op.ToUpper()) {
         "1" { Invoke-KitReparo }
@@ -771,6 +874,7 @@ do {
         "6" { Invoke-WingetUpdate }
         "7" { Invoke-BackupDrivers }
         "8" { Invoke-ManutencaoCompleta }
+        "A" { Invoke-ManutencaoComReinicio }
         "9" { Invoke-ColetarLogs }
         "R" { Invoke-ReiniciarComputador }
         "0" {
@@ -780,7 +884,7 @@ do {
             Write-Log "SESSAO" "Encerrado pelo tecnico"
             Write-Host ""; Start-Sleep 2
         }
-        default { Write-Aviso "Opcao invalida. Use 1-9, R ou 0."; Start-Sleep 2 }
+        default { Write-Aviso "Opcao invalida. Use 1-9, A, R ou 0."; Start-Sleep 2 }
     }
 
 } while ($op -ne "0")
