@@ -1,27 +1,26 @@
 ﻿
 # ==============================================================================
-# CONSOLE
+# ipHosting KIT DE MANUTENCAO TECNICA v3.0
+# Console administrativo moderno para suporte Windows
+# ==============================================================================
+
+# ==============================================================================
+# CONSOLE SETUP
 # ==============================================================================
 $OutputEncoding            = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding  = [System.Text.Encoding]::UTF8
 try {
-    $host.UI.RawUI.BufferSize = New-Object System.Management.Automation.Host.Size(84, 3000)
-    $host.UI.RawUI.WindowSize = New-Object System.Management.Automation.Host.Size(84, 42)
+    $host.UI.RawUI.BufferSize = New-Object System.Management.Automation.Host.Size(100, 3000)
+    $host.UI.RawUI.WindowSize = New-Object System.Management.Automation.Host.Size(100, 42)
 } catch { }
 
 # ==============================================================================
-# CHARS UNICODE (gerados em runtime -- sem BOM no arquivo)
+# GLOBAIS
 # ==============================================================================
-$bk = [char]0x2588  # FULL BLOCK
-$cv = [char]0x2551  # BOX V double
-$ch = [char]0x2550  # BOX H double
-$tl = [char]0x2554  # corner top-left
-$tr = [char]0x2557  # corner top-right
-$bl = [char]0x255A  # corner bottom-left
-$br = [char]0x255D  # corner bottom-right
-$ml = [char]0x2560  # mid left T
-$mr = [char]0x2563  # mid right T
-$H71 = "$ch" * 71
+$UI_WIDTH          = 73
+$UI_HW             = [string][char]0x2550 * $UI_WIDTH
+$ch                = [char]0x2550
+$cv                = [char]0x2551
 
 # ==============================================================================
 # LOG DE EXECUCAO
@@ -50,14 +49,162 @@ function Pause-Script {
     $null = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 }
 
-function Get-Bar {
-    param([int]$Pct, [int]$Width = 10)
-    $filled = [math]::Max(0, [math]::Min($Width, [math]::Round($Pct / 100 * $Width)))
-    $empty  = $Width - $filled
-    $b = ([string][char]0x2588) * $filled + ([string][char]0x2591) * $empty
-    return "[$b] ${Pct}%"
+# ==============================================================================
+# SISTEMA DE UI — FUNCOES REUTILIZAVEIS
+# ==============================================================================
+
+function Write-UIBanner {
+    Clear-Host
+    $bk = [char]0x2588
+    $ch = [char]0x2550
+    $cv = [char]0x2551
+    $tl = [char]0x2554
+    $tr = [char]0x2557
+    $bl = [char]0x255A
+    $br = [char]0x255D
+    $W  = $UI_WIDTH
+    $HW = [string]$ch * $W
+
+    function ArtRow {
+        param([string]$inner)
+        if ($inner.Length -lt $W) { $inner = $inner + (' ' * ($W - $inner.Length)) }
+        elseif ($inner.Length -gt $W) { $inner = $inner.Substring(0, $W) }
+        Write-Host "  $cv$inner$cv" -ForegroundColor Cyan
+    }
+
+    function CenterRow {
+        param([string]$text, [string]$Color = "White")
+        $p = [math]::Floor(($W - $text.Length) / 2)
+        $r = $W - $p - $text.Length
+        Write-Host "  $cv$(' ' * $p)$text$(' ' * $r)$cv" -ForegroundColor $Color
+    }
+
+    Write-Host ""
+    Write-Host "  $tl$HW$tr" -ForegroundColor DarkCyan
+    ArtRow ""
+
+    # Linha 1
+    ArtRow ("   "+$bk+$bk+$tr+$bk+$bk+$bk+$bk+$bk+$bk+$tr+" "+$bk+$bk+$tr+"  "+$bk+$bk+$tr+" "+$bk+$bk+$bk+$bk+$bk+$bk+$tr+" "+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$tr+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$tr+$bk+$bk+$tr+$bk+$bk+$bk+$tr+"   "+$bk+$bk+$tr+" "+$bk+$bk+$bk+$bk+$bk+$bk+$tr+" ")
+    # Linha 2
+    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$bk+$bk+$tr+$bk+$bk+$cv+"  "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$ch+$bk+$bk+$tr+$bk+$bk+$tl+$ch+$ch+$ch+$ch+$br+$bl+$ch+$ch+$bk+$bk+$tl+$ch+$ch+$br+$bk+$bk+$cv+$bk+$bk+$bk+$bk+$tr+"  "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$ch+$ch+$br+" ")
+    # Linha 3
+    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$bk+$bk+$bk+$bk+$tl+$br+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$cv+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$tr+"   "+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$tl+$bk+$bk+$tr+" "+$bk+$bk+$cv+$bk+$bk+$cv+"  "+$bk+$bk+$bk+$tr)
+    # Linha 4
+    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$ch+$br+" "+$bk+$bk+$tl+$ch+$ch+$bk+$bk+$cv+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bl+$ch+$ch+$ch+$ch+$bk+$bk+$cv+"   "+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$cv+$bl+$bk+$bk+$tr+$bk+$bk+$cv+$bk+$bk+$cv+"   "+$bk+$bk+$cv)
+    # Linha 5
+    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$cv+"     "+$bk+$bk+$cv+"  "+$bk+$bk+$cv+$bl+$bk+$bk+$bk+$bk+$bk+$bk+$tl+$br+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$cv+"   "+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$cv+" "+$bl+$bk+$bk+$bk+$bk+$cv+$bl+$bk+$bk+$bk+$bk+$bk+$bk+$tl+$br)
+    # Linha 6
+    ArtRow ("   "+$bl+$ch+$ch+$br+$bl+$ch+$ch+$br+"     "+$bl+$ch+$ch+$br+"  "+$bl+$ch+$ch+$br+" "+$bl+$ch+$ch+$ch+$ch+$ch+$br+" "+$bl+$ch+$ch+$ch+$ch+$ch+$ch+$br+"   "+$bl+$ch+$ch+$br+"   "+$bl+$ch+$ch+$br+$bl+$ch+$ch+$br+"  "+$bl+$ch+$ch+$ch+$br+" "+$bl+$ch+$ch+$ch+$ch+$ch+$br+" ")
+
+    ArtRow ""
+    CenterRow "KIT DE MANUTENCAO TECNICA  |  ipHosting v3.0" "White"
+    Write-Host "  $bl$HW$br" -ForegroundColor DarkCyan
+    Write-Host ""
 }
 
+function Write-UIStat {
+    param([string]$Label, [string]$Value, [string]$Color = "White")
+    $line = "  $($cv)   $($Label): $Value"
+    $pad  = $UI_WIDTH + 3 - $line.Length  # +3 for the "  $cv" prefix
+    if ($pad -lt 0) { $pad = 0 }
+    Write-Host "$line$(' ' * $pad)$cv" -ForegroundColor $Color
+}
+
+function Write-UISection {
+    param([string]$Title, [string]$Color = "DarkCyan")
+    $tl = [char]0x2554; $tr = [char]0x2557; $bl = [char]0x255A; $br = [char]0x255D
+    $ml = [char]0x2560; $mr = [char]0x2563
+    Write-Host ""
+    Write-Host "  $ml$UI_HW$mr" -ForegroundColor $Color
+    $header = "  $cv  >> $Title"
+    $pad = $UI_WIDTH + 3 - $header.Length; if ($pad -lt 0) { $pad = 0 }
+    Write-Host "$header$(' ' * $pad)$cv" -ForegroundColor White
+    Write-Host "  $ml$UI_HW$mr" -ForegroundColor $Color
+}
+
+function Write-UIAlert {
+    param([string]$Message, [string]$Color = "Yellow")
+    $line = "  $cv  [!] $Message"
+    $pad  = $UI_WIDTH + 3 - $line.Length; if ($pad -lt 0) { $pad = 0 }
+    Write-Host "$line$(' ' * $pad)$cv" -ForegroundColor $Color
+}
+
+function Write-UIFooter {
+    $tl = [char]0x2554; $tr = [char]0x2557; $bl = [char]0x255A; $br = [char]0x255D
+    $ml = [char]0x2560; $mr = [char]0x2563
+    Write-Host "  $bl$UI_HW$br" -ForegroundColor DarkCyan
+    Write-Host ""
+}
+
+function Write-UIMenu {
+    param(
+        [string]$Label,
+        [array]$Items,
+        [string]$Color = "Cyan",
+        [string]$Separator = "─"
+    )
+    $sp = [string][char]0x2500
+    $dashes = "$sp$sp $($Label) " + ($sp * [math]::Max(0, $UI_WIDTH - 4 - $Label.Length - 4))
+    Write-UIStat "" ""
+    Write-UIStat $dashes "" $Color
+    foreach ($item in $Items) {
+        Write-UIStat " $item" "" $Color
+    }
+}
+
+# ==============================================================================
+# BARRA ASCII
+# ==============================================================================
+function Get-Bar {
+    param([int]$Pct, [int]$Width = 20)
+    $filled = [math]::Max(0, [math]::Min($Width, [math]::Floor(($Pct / 100) * $Width)))
+    $empty  = $Width - $filled
+    $bar = ("#" * $filled) + ("-" * $empty)
+    return "$bar $Pct%"
+}
+
+# ==============================================================================
+# DETECCAO DE IP PRIMARIO (filtra adaptadores virtuais)
+# ==============================================================================
+function Get-PrimaryIP {
+    try {
+        $ip = Get-NetIPConfiguration |
+            Where-Object {
+                $_.IPv4DefaultGateway -ne $null -and
+                $_.NetAdapter.Status -eq "Up" -and
+                $_.IPv4Address.IPAddress -notlike "169.254*" -and
+                $_.NetAdapter.InterfaceDescription -notmatch "Hyper-V|VMware|VirtualBox|WSL|Docker|Tailscale|ZeroTier|VPN"
+            } |
+            Select-Object -First 1
+
+        if ($ip) {
+            return @{
+                Interface = $ip.InterfaceAlias
+                IP        = $ip.IPv4Address.IPAddress
+                Gateway   = $ip.IPv4DefaultGateway.NextHop
+            }
+        }
+    } catch {}
+    return $null
+}
+
+# ==============================================================================
+# SISTEMA CACHE
+# ==============================================================================
+$Global:SystemInfo = @{}
+function Update-SystemCache {
+    try {
+        $Global:SystemInfo.OS   = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $Global:SystemInfo.CS   = Get-CimInstance Win32_ComputerSystem  -ErrorAction SilentlyContinue
+        $Global:SystemInfo.Disk = Get-PSDrive C -ErrorAction SilentlyContinue
+        $Global:SystemInfo.Net  = Get-PrimaryIP
+        $Global:SystemInfo.RebootPending = Test-RebootPending
+    } catch {}
+}
+
+# ==============================================================================
+# REBOOT PENDING
+# ==============================================================================
 function Test-RebootPending {
     try {
         if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") { return $true }
@@ -66,26 +213,6 @@ function Test-RebootPending {
         if ($pfr) { return $true }
     } catch {}
     return $false
-}
-
-function Show-Resumo {
-    param([string]$Modulo, [int]$Seg, [string]$Extra = "")
-    $msg = "  ==> $Modulo concluido em ${Seg}s"
-    if ($Extra) { $msg += " | $Extra" }
-    Write-Host "`n$msg" -ForegroundColor Green
-    Write-Log "RESUMO" ($msg.Trim())
-}
-
-function Show-Separador {
-    param([string]$Titulo = "")
-    $HW = "$ch" * 73
-    if ($Titulo) {
-        Write-Host ""
-        Write-Host "  $tl$HW$tr" -ForegroundColor DarkCyan
-        Write-Host "  $cv  >> $Titulo" -ForegroundColor White
-        Write-Host "  $bl$HW$br" -ForegroundColor DarkCyan
-        Write-Host ""
-    }
 }
 
 # ==============================================================================
@@ -105,8 +232,7 @@ function Load-Settings {
 Load-Settings
 
 # ==============================================================================
-# ==============================================================================
-# ADMIN
+# VERIFICACAO DE ADMIN
 # ==============================================================================
 $IPHST_URL = "https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1"
 
@@ -117,160 +243,142 @@ if (-not $isAdmin) {
     Write-Host "  Reiniciando com elevacao..." -ForegroundColor Yellow
     Start-Sleep -Seconds 2
     if ($PSCommandPath) {
-        # Execucao local: relanca o proprio arquivo
         Start-Process PowerShell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     } else {
-        # Execucao via irm | iex: re-baixa e roda elevado
         Start-Process PowerShell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm '$IPHST_URL' | iex`"" -Verb RunAs
     }
     exit
 }
 
 # ==============================================================================
-# BANNER
+# STATUS DO SISTEMA
 # ==============================================================================
-function Show-Banner {
-    Clear-Host
-    # Caracteres construidos em runtime via char codes (sem unicode no arquivo fonte)
-    # Cada linha da arte tem exatamente $W chars internos entre os dois $cv
-    $W = 73  # largura interna da caixa
-    $HW = "$ch" * $W
+function Show-SystemStatus {
+    Update-SystemCache
+    $s = $Global:SystemInfo
 
-    function ArtRow {
-        param([string]$inner)
-        # Garante que $inner tem exatamente $W chars, truncando ou completando com espaco
-        if ($inner.Length -lt $W) { $inner = $inner + (' ' * ($W - $inner.Length)) }
-        elseif ($inner.Length -gt $W) { $inner = $inner.Substring(0, $W) }
-        Write-Host "  $cv$inner$cv" -ForegroundColor Cyan
+    Write-UISection "STATUS DO SISTEMA" "DarkCyan"
+
+    # Linha de cabecalho com borda
+    $tl = [char]0x2554; $tr = [char]0x2557
+    Write-Host ""
+
+    # Host / Usuario / Admin
+    $adminStr = if ($isAdmin) { "SIM" } else { "NAO" }
+    $netInfo = $s.Net
+    if (-not $netInfo) {
+        # Fallback: pega qualquer IP que nao seja loopback
+        try {
+            $fallbackIP = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.IPAddress -ne "127.0.0.1" } | Select-Object -First 1).IPAddress
+            $netInfo = @{ IP = $fallbackIP; Gateway = "---"; Interface = "---" }
+        } catch { $netInfo = @{ IP = "---"; Gateway = "---"; Interface = "---" } }
     }
 
-    function CenterRow {
-        param([string]$text, [string]$Color = "White")
-        $p = [math]::Floor(($W - $text.Length) / 2)
-        $r = $W - $p - $text.Length
-        Write-Host "  $cv$(' ' * $p)$text$(' ' * $r)$cv" -ForegroundColor $Color
+    Write-UIStat "HOST"     "$env:COMPUTERNAME" "White"
+    Write-UIStat "USUARIO"  "$env:USERNAME" "White"
+    Write-UIStat "IP"       "$($netInfo.IP)" "White"
+    Write-UIStat "GATEWAY"  "$($netInfo.Gateway)" "White"
+
+    # Uptime
+    if ($s.OS) {
+        $up  = (Get-Date) - $s.OS.LastBootUpTime
+        $upStr = "$($up.Days)d $($up.Hours)h $($up.Minutes)min"
+        Write-UIStat "UPTIME"   "$upStr" "White"
+    }
+
+    Write-UIStat "ADMIN"    "$adminStr" "White"
+
+    Write-Host ""
+    Write-UISection "STATUS OPERACIONAL" "DarkCyan"
+
+    # RAM
+    if ($s.OS -and $s.CS) {
+        $rTot   = [math]::Round($s.CS.TotalPhysicalMemory / 1GB, 1)
+        $rUsed  = [math]::Round(($s.CS.TotalPhysicalMemory - $s.OS.FreePhysicalMemory * 1KB) / 1GB, 1)
+        $ramPct = [math]::Round($rUsed / $rTot * 100)
+        $ramBar = Get-Bar $ramPct
+        $ramColor = if ($ramPct -ge 90) { "Red" } elseif ($ramPct -ge 75) { "Yellow" } else { "White" }
+        Write-UIStat "RAM" "$ramBar ($rUsed/$rTot GB)" $ramColor
+    }
+
+    # DISCO
+    if ($s.Disk) {
+        $dTot    = [math]::Round(($s.Disk.Used + $s.Disk.Free) / 1GB, 0)
+        $dUsed   = [math]::Round($s.Disk.Used / 1GB, 0)
+        $diskPct = [math]::Round($s.Disk.Used / ($s.Disk.Used + $s.Disk.Free) * 100)
+        $diskBar = Get-Bar $diskPct
+        $diskColor = if ($diskPct -ge 90) { "Red" } elseif ($diskPct -ge 75) { "Yellow" } else { "White" }
+        Write-UIStat "DISCO C:" "$diskBar ($dUsed/$dTot GB)" $diskColor
     }
 
     Write-Host ""
-    Write-Host "  $tl$HW$tr" -ForegroundColor Cyan
-    ArtRow ""
 
-    # Arte ipHosting construida com char codes — sem Unicode no arquivo
-    ArtRow ("   "+$bk+$bk+$tr+$bk+$bk+$bk+$bk+$bk+$bk+$tr+" "+$bk+$bk+$tr+"  "+$bk+$bk+$tr+" "+$bk+$bk+$bk+$bk+$bk+$bk+$tr+" "+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$tr+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$tr+$bk+$bk+$tr+$bk+$bk+$bk+$tr+"   "+$bk+$bk+$tr+" "+$bk+$bk+$bk+$bk+$bk+$bk+$tr+" ")
-    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$bk+$bk+$tr+$bk+$bk+$cv+"  "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$ch+$bk+$bk+$tr+$bk+$bk+$tl+$ch+$ch+$ch+$ch+$br+$bl+$ch+$ch+$bk+$bk+$tl+$ch+$ch+$br+$bk+$bk+$cv+$bk+$bk+$bk+$bk+$tr+"  "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$ch+$ch+$br+" ")
-    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$bk+$bk+$bk+$bk+$tl+$br+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$cv+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$tr+"   "+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$tl+$bk+$bk+$tr+" "+$bk+$bk+$cv+$bk+$bk+$cv+"  "+$bk+$bk+$bk+$tr)
-    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$tl+$ch+$ch+$ch+$br+" "+$bk+$bk+$tl+$ch+$ch+$bk+$bk+$cv+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bl+$ch+$ch+$ch+$ch+$bk+$bk+$cv+"   "+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$cv+$bl+$bk+$bk+$tr+$bk+$bk+$cv+$bk+$bk+$cv+"   "+$bk+$bk+$cv)
-    ArtRow ("   "+$bk+$bk+$cv+$bk+$bk+$cv+"     "+$bk+$bk+$cv+"  "+$bk+$bk+$cv+$bl+$bk+$bk+$bk+$bk+$bk+$bk+$tl+$br+$bk+$bk+$bk+$bk+$bk+$bk+$bk+$cv+"   "+$bk+$bk+$cv+"   "+$bk+$bk+$cv+$bk+$bk+$cv+" "+$bl+$bk+$bk+$bk+$bk+$cv+$bl+$bk+$bk+$bk+$bk+$bk+$bk+$tl+$br)
-    ArtRow ("   "+$bl+$ch+$ch+$br+$bl+$ch+$ch+$br+"     "+$bl+$ch+$ch+$br+"  "+$bl+$ch+$ch+$br+" "+$bl+$ch+$ch+$ch+$ch+$ch+$br+" "+$bl+$ch+$ch+$ch+$ch+$ch+$ch+$br+"   "+$bl+$ch+$ch+$br+"   "+$bl+$ch+$ch+$br+$bl+$ch+$ch+$br+"  "+$bl+$ch+$ch+$ch+$br+" "+$bl+$ch+$ch+$ch+$ch+$ch+$br+" ")
+    # Alertas
+    $hasAlert = $false
+    if ($s.RebootPending) { $hasAlert = $true; Write-UIAlert "Reinicio pendente — aplique patches antes de continuar" "Red" }
+    if ($s.Disk -and $diskPct -ge 90) { $hasAlert = $true; Write-UIAlert "Disco acima de 90% — libere espaco em breve" "Yellow" }
+    if (-not $hasAlert) {
+        Write-UIStat "ALERTAS" "Nenhum" "DarkGray"
+    }
 
-    ArtRow ""
-    CenterRow "KIT DE MANUTENCAO TECNICA  |  ipHosting v3.0"
-    Write-Host "  $bl$HW$br" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  Maquina : $env:COMPUTERNAME     Usuario : $env:USERNAME     $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -ForegroundColor DarkGray
-    Write-Host "  Log     : $logFile" -ForegroundColor DarkGray
     Write-Host ""
 }
 
 # ==============================================================================
-# MENU
+# MENU PRINCIPAL
 # ==============================================================================
 function Show-Menu {
-    $W  = 73
-    $HW = "$ch" * $W
-    $hr = [string][char]0x2500  # linha fina horizontal
+    Write-UISection "MENU PRINCIPAL" "DarkCyan"
 
-    function Row {
-        param([string]$T, [string]$C = "Cyan")
-        $pad = $W - 2 - $T.Length; if ($pad -lt 0) { $pad = 0 }
-        Write-Host "  $cv  $T$(' ' * $pad)$cv" -ForegroundColor $C
-    }
-    function MenuSec {
-        param([string]$Label, [string]$C = "DarkCyan")
-        $dashes = "$hr" * ($W - 6 - $Label.Length)
-        Row " $hr$hr $Label $dashes" $C
-    }
+    Write-UIMenu "Reparo e Manutencao" @(
+        "[1]  Kit Reparo",
+        "     SFC + DISM (repara arquivos do Windows)",
+        "[2]  Limpeza",
+        "     Temp, Prefetch, Lixeira, Event Logs",
+        "[3]  Reparo Spooler",
+        "     Para/limpa/reinicia servico de impressao",
+        "[4]  Rede Safe Mode",
+        "     Flush DNS + Winsock Reset"
+    ) "Yellow"
 
-    # --- Stats ao vivo ---
-    $ramPct = 0; $diskPct = 0; $upDays = 0
-    $sHost = ""; $sRam = ""; $sDisk = ""; $sUp = ""; $reboot = $false
+    Write-UIMenu "Ferramentas" @(
+        "[5]  Diagnostico Rapido",
+        "     IP, Disco, Ativacao, Defender, Uptime",
+        "[6]  Atualizar Apps",
+        "     Winget upgrade em todos os aplicativos",
+        "[7]  Backup de Drivers",
+        "     Exporta todos os drivers instalados"
+    ) "Cyan"
+
+    Write-UIMenu "Avancado" @(
+        "[8]  Manutencao Completa",
+        "     Limpeza + Rede + Diagnostico (automatico)",
+        "[A]  Manutencao Completa + Reboot",
+        "     Igual ao [8] e reinicia automaticamente",
+        "[9]  Coleta de Logs Profundos",
+        "     Para analise por IA"
+    ) "Magenta"
+
+    Write-UIMenu "Sistema" @(
+        "[R]  Reiniciar Computador",
+        "[0]  Sair"
+    ) "DarkGray"
+
+    Write-Host ""
+    Write-UIFooter
+
+    # Footer com info da sessao
     try {
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        $cs = Get-CimInstance Win32_ComputerSystem  -ErrorAction SilentlyContinue
-        $dk = Get-PSDrive C                         -ErrorAction SilentlyContinue
-        $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-               Where-Object { $_.IPAddress -ne "127.0.0.1" } | Select-Object -First 1).IPAddress
-        $adminStr = if ($isAdmin) { "SIM" } else { "NAO" }
-        $sHost = "  HOST: $env:COMPUTERNAME   IP: $ip   ADMIN: $adminStr"
-
-        if ($os -and $cs) {
-            $rTot   = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
-            $rUsed  = [math]::Round(($cs.TotalPhysicalMemory - $os.FreePhysicalMemory * 1KB) / 1GB, 1)
-            $ramPct = [math]::Round($rUsed / $rTot * 100)
-            $bar    = Get-Bar $ramPct
-            $sRam   = "  RAM:   $bar  ($rUsed/$rTot GB)"
-
-            $up    = (Get-Date) - $os.LastBootUpTime
-            $upDays = $up.Days
-            $upStr  = "$($up.Days)d $($up.Hours)h $($up.Minutes)min"
-            $upWarn = if ($upDays -gt 30) { "  [!] +30 dias sem reboot" } else { "" }
-            $sUp    = "  Uptime: $upStr$upWarn"
+        $psVer = $PSVersionTable.PSVersion.ToString()
+        $osVer = ""
+        if ($Global:SystemInfo.OS) {
+            $osVer = $Global:SystemInfo.OS.Caption
         }
-        if ($dk) {
-            $dTot    = [math]::Round(($dk.Used + $dk.Free) / 1GB, 0)
-            $dUsed   = [math]::Round($dk.Used / 1GB, 0)
-            $diskPct = [math]::Round($dk.Used / ($dk.Used + $dk.Free) * 100)
-            $bar     = Get-Bar $diskPct
-            $sDisk   = "  DISCO: $bar  ($dUsed/$dTot GB)"
-        }
-        $reboot = Test-RebootPending
+        Write-Host "  Sessao : PowerShell $psVer" -ForegroundColor DarkGray
+        if ($osVer) { Write-Host "  Windows: $osVer" -ForegroundColor DarkGray }
+        Write-Host "  Hora   : $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -ForegroundColor DarkGray
     } catch {}
-
-    function StatRow {
-        param([string]$T, [int]$Pct, [int]$Dias = 0)
-        $cor = if ($Pct -ge 90 -or $Dias -gt 30) { "Red" } elseif ($Pct -ge 75 -or $Dias -gt 14) { "Yellow" } else { "DarkGray" }
-        $pad = $W - 2 - $T.Length; if ($pad -lt 0) { $pad = 0 }
-        Write-Host "  $cv$T$(' ' * $pad)$cv" -ForegroundColor $cor
-    }
-
-    # --- Desenho ---
-    Write-Host "  $tl$HW$tr" -ForegroundColor Cyan
-    Row "MENU PRINCIPAL" "White"
-    Write-Host "  $ml$HW$mr" -ForegroundColor Cyan
-    if ($sHost) { StatRow $sHost 0 }
-    Write-Host "  $ml$HW$mr" -ForegroundColor Cyan
-    if ($sRam)  { StatRow $sRam  $ramPct }
-    if ($sDisk) { StatRow $sDisk $diskPct }
-    if ($sUp)   { StatRow $sUp   0 $upDays }
-    if ($reboot) {
-        $rMsg = "  [!] REINICIO PENDENTE — aplique patches antes de continuar"
-        $pad  = $W - 2 - $rMsg.Length; if ($pad -lt 0) { $pad = 0 }
-        Write-Host "  $cv$rMsg$(' ' * $pad)$cv" -ForegroundColor Red
-    }
-    Write-Host "  $ml$HW$mr" -ForegroundColor Cyan
-
-    Row ""
-    MenuSec "Reparo e Manutencao" "Yellow"
-    Row "  [1]  Kit Reparo        - SFC + DISM (repara arquivos do Windows)" "Yellow"
-    Row "  [2]  Limpeza           - Temp, Prefetch, Lixeira, Event Logs" "Yellow"
-    Row "  [3]  Reparo Spooler    - Para/limpa/reinicia servico de impressao" "Yellow"
-    Row "  [4]  Rede Safe Mode    - Flush DNS + Winsock Reset" "Yellow"
-    Row ""
-    MenuSec "Ferramentas" "Cyan"
-    Row "  [5]  Diagnostico Rapido - IP, Disco, Ativacao, Defender, Uptime" "Cyan"
-    Row "  [6]  Atualizar Apps     - Winget upgrade em todos os aplicativos" "Cyan"
-    Row "  [7]  Backup de Drivers  - Exporta todos os drivers instalados" "Cyan"
-    Row ""
-    MenuSec "Avancado" "Magenta"
-    Row "  [8]  Manutencao Completa         - Limpeza + Rede + Diagnostico" "Magenta"
-    Row "  [A]  Manutencao Completa + Reboot - igual ao [8] e reinicia auto" "Magenta"
-    Row "  [9]  Coleta de Logs Profundos para Analise" "Green"
-    Row ""
-    MenuSec "Sistema" "DarkGray"
-    Row "  [R]  Reiniciar Computador" "DarkGray"
-    Row "  [0]  Sair" "Red"
-    Row ""
-    Write-Host "  $bl$HW$br" -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -431,7 +539,8 @@ function Invoke-DiagnosticoRapido {
     Write-Host ""
     Write-Info "Uptime:"
     try {
-        $os = Get-CimInstance Win32_OperatingSystem
+        $os = $Global:SystemInfo.OS
+        if (-not $os) { $os = Get-CimInstance Win32_OperatingSystem }
         $up = (Get-Date) - $os.LastBootUpTime
         Write-Host "    $($up.Days)d $($up.Hours)h $($up.Minutes)min  (boot: $($os.LastBootUpTime.ToString('dd/MM/yyyy HH:mm')))" -ForegroundColor White
     } catch { Write-Aviso $_ }
@@ -537,14 +646,8 @@ function Invoke-ManutencaoCompleta {
 
     $seg = [int]((Get-Date)-$t0).TotalSeconds
     Write-Host ""
-    Write-Host "  $tl$H71$tr" -ForegroundColor Magenta
-    $txt = "MANUTENCAO COMPLETA CONCLUIDA em ${seg}s"
-    $pad = [math]::Floor((71 - $txt.Length) / 2)
-    Write-Host "  $cv$(' ' * $pad)$txt$(' ' * (71 - $pad - $txt.Length))$cv" -ForegroundColor Green
-    $txt2 = "Recomenda-se REINICIAR a maquina para aplicar todas as mudancas."
-    $pad2 = [math]::Floor((71 - $txt2.Length) / 2)
-    Write-Host "  $cv$(' ' * $pad2)$txt2$(' ' * (71 - $pad2 - $txt2.Length))$cv" -ForegroundColor Yellow
-    Write-Host "  $bl$H71$br" -ForegroundColor Magenta
+    Show-Separador "MANUTENCAO COMPLETA CONCLUIDA em ${seg}s"
+    Write-Host "  Recomenda-se REINICIAR a maquina para aplicar todas as mudancas." -ForegroundColor Yellow
     Write-Log "RESUMO" "Manutencao Completa em ${seg}s"
     Pause-Script
 }
@@ -574,11 +677,7 @@ function Invoke-ManutencaoComReinicio {
     Write-Log "RESUMO" "Manutencao Completa + Reboot em ${seg}s"
 
     Write-Host ""
-    Write-Host "  $tl$H71$tr" -ForegroundColor Magenta
-    $txt = "CONCLUIDO em ${seg}s — REINICIANDO O COMPUTADOR"
-    $pad = [math]::Floor((71 - $txt.Length) / 2)
-    Write-Host "  $cv$(' ' * $pad)$txt$(' ' * (71 - $pad - $txt.Length))$cv" -ForegroundColor Green
-    Write-Host "  $bl$H71$br" -ForegroundColor Magenta
+    Show-Separador "CONCLUIDO em ${seg}s — REINICIANDO O COMPUTADOR"
 
     Write-Host ""
     Write-Info "Reiniciando em 5 segundos..."
@@ -610,7 +709,6 @@ function Invoke-ColetarLogs {
     Write-Host "    - Ultimas linhas do CBS.log (SFC) e DISM.log"            -ForegroundColor DarkGray
     Write-Host "    - Processos que mais consomem CPU/RAM"                    -ForegroundColor DarkGray
     Write-Host ""
-
     if ((Read-Host "  Iniciar coleta? (S/N)") -notmatch "^[Ss]$") { Write-Aviso "Cancelado."; Pause-Script; return }
 
     try { New-Item -ItemType Directory -Path $relDir -Force | Out-Null } catch { }
@@ -812,7 +910,6 @@ function Invoke-ColetarLogs {
         Write-Host "  Arquivo : $relFile" -ForegroundColor White
         Write-Host "  Tamanho : $([math]::Round((Get-Item $relFile).Length/1KB,1)) KB" -ForegroundColor White
         Write-Log "RESUMO" "Relatorio salvo: $relFile"
-
         Write-Host ""
         Write-Aviso "Como usar com IA:"
         Write-Host "  1. Abra o arquivo acima em um editor de texto" -ForegroundColor DarkGray
@@ -820,13 +917,11 @@ function Invoke-ColetarLogs {
         Write-Host "  3. Cole no chat da IA (ChatGPT, Claude, Gemini)" -ForegroundColor DarkGray
         Write-Host "  4. A IA ira identificar os problemas e dar recomendacoes" -ForegroundColor DarkGray
         Write-Host ""
-
         $abrir = Read-Host "  Abrir o arquivo agora no Bloco de Notas? (S/N)"
         if ($abrir -match "^[Ss]$") { Start-Process notepad.exe -ArgumentList $relFile }
     } catch {
         Write-Erro "Falha ao salvar relatorio: $_"
     }
-
     Pause-Script
 }
 
@@ -851,12 +946,42 @@ function Invoke-ReiniciarComputador {
 }
 
 # ==============================================================================
+# FUNCOES AUXILIARES COMPARTILHADAS
+# ==============================================================================
+function Show-Resumo {
+    param([string]$Modulo, [int]$Seg, [string]$Extra = "")
+    $msg = "  ==> $Modulo concluido em ${Seg}s"
+    if ($Extra) { $msg += " | $Extra" }
+    Write-Host "`n$msg" -ForegroundColor Green
+    Write-Log "RESUMO" ($msg.Trim())
+}
+
+function Show-Separador {
+    param([string]$Titulo = "")
+    $tl = [char]0x2554; $tr = [char]0x2557
+    $bl = [char]0x255A; $br = [char]0x255D
+    $ch = [char]0x2550
+    $cv2 = [char]0x2551
+    $HW = [string]$ch * $UI_WIDTH
+    if ($Titulo) {
+        Write-Host ""
+        Write-Host "  $tl$HW$tr" -ForegroundColor DarkCyan
+        $line = "  $cv2  >> $Titulo"
+        $pad = $UI_WIDTH + 3 - $line.Length; if ($pad -lt 0) { $pad = 0 }
+        Write-Host "$line$(' ' * $pad)$cv2" -ForegroundColor White
+        Write-Host "  $bl$HW$br" -ForegroundColor DarkCyan
+        Write-Host ""
+    }
+}
+
+# ==============================================================================
 # LOOP PRINCIPAL
 # ==============================================================================
 Write-Log "SESSAO" "Iniciado por $env:USERNAME em $env:COMPUTERNAME"
 
 do {
-    Show-Banner
+    Write-UIBanner
+    Show-SystemStatus
     Show-Menu
 
     Write-Host "  Opcao: " -ForegroundColor White -NoNewline
@@ -878,7 +1003,7 @@ do {
         "9" { Invoke-ColetarLogs }
         "R" { Invoke-ReiniciarComputador }
         "0" {
-            Show-Banner
+            Write-UIBanner
             Write-Host "  Encerrando... Bom trabalho, $env:USERNAME!" -ForegroundColor Green
             Write-Host "  Log da sessao: $logFile" -ForegroundColor DarkGray
             Write-Log "SESSAO" "Encerrado pelo tecnico"
