@@ -194,8 +194,14 @@ function Get-PrimaryIP {
 $Global:SystemInfo = @{}
 function Update-SystemCache {
     try {
-        $Global:SystemInfo.OS   = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        $Global:SystemInfo.CS   = Get-CimInstance Win32_ComputerSystem  -ErrorAction SilentlyContinue
+        # OS e CS sao estaticos — consulta apenas uma vez
+        if (-not $Global:SystemInfo.OS) {
+            $Global:SystemInfo.OS = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        }
+        if (-not $Global:SystemInfo.CS) {
+            $Global:SystemInfo.CS = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        }
+        # Disco, Rede e RebootPending sao dinamicos — atualiza sempre
         $Global:SystemInfo.Disk = Get-PSDrive C -ErrorAction SilentlyContinue
         $Global:SystemInfo.Net  = Get-PrimaryIP
         $Global:SystemInfo.RebootPending = Test-RebootPending
@@ -428,10 +434,11 @@ function Invoke-Limpeza {
         param([string]$Path, [string]$Nome)
         Write-Info "Limpando $Nome..."
         try {
-            $a = (Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
-            Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-            $d = (Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
-            $mb = [math]::Round((($a - $d) / 1MB), 2)
+            $arquivos = Get-ChildItem $Path -Recurse -Force -ErrorAction SilentlyContinue
+            if (-not $arquivos) { Write-Success "${Nome}: 0 MB liberados."; return 0 }
+            $totalBytes = ($arquivos | Measure-Object Length -Sum -ErrorAction SilentlyContinue).Sum
+            $arquivos | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            $mb = [math]::Round(($totalBytes / 1MB), 2)
             Write-Success "${Nome}: ${mb} MB liberados."
             return $mb
         } catch { Write-Erro "Erro em ${Nome}: $_"; return 0 }
@@ -549,7 +556,7 @@ function Invoke-DiagnosticoRapido {
     Write-Info "Ativacao Windows:"
     try {
         $m = @{0="Nao licenciado";1="ATIVO";2="OOBGrace";3="OOTGrace";4="NonGenuine";5="Notificacao";6="ExtendedGrace"}
-        $l = Get-CimInstance SoftwareLicensingProduct -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Windows*" } | Select-Object -First 1
+        $l = Get-CimInstance SoftwareLicensingProduct -Filter "Name like '%Windows%'" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($l) { $cor = if ($l.LicenseStatus -eq 1) { "Green" } else { "Yellow" }; Write-Host "    $($m[[int]$l.LicenseStatus])" -ForegroundColor $cor }
     } catch { Write-Aviso $_ }
 
@@ -768,8 +775,8 @@ function Invoke-ColetarLogs {
     Secao "2. ATIVACAO DO WINDOWS"
     try {
         $m = @{0="Nao licenciado";1="ATIVO (Licenciado)";2="OOBGrace";3="OOTGrace";4="NonGenuineGrace";5="Notificacao";6="ExtendedGrace"}
-        $l = Get-CimInstance SoftwareLicensingProduct -ErrorAction SilentlyContinue |
-             Where-Object { $_.Name -like "*Windows*" } | Select-Object -First 1
+        $l = Get-CimInstance SoftwareLicensingProduct -Filter "Name like '%Windows%'" -ErrorAction SilentlyContinue |
+             Select-Object -First 1
         if ($l) { Linha "Status: $($m[[int]$l.LicenseStatus])" } else { Linha "Nao foi possivel verificar." }
     } catch { Linha "Erro: $_" }
 
@@ -840,9 +847,7 @@ function Invoke-ColetarLogs {
     Secao "9. EVENT LOG - SYSTEM (Erros/Avisos - ultimas 24h)"
     try {
         $desde = (Get-Date).AddHours(-24)
-        $evs = Get-WinEvent -LogName System -ErrorAction SilentlyContinue |
-               Where-Object { $_.TimeCreated -ge $desde -and $_.Level -in @(1,2,3) } |
-               Select-Object -First 20
+        $evs = Get-WinEvent -FilterHashtable @{LogName='System'; Level=1,2,3; StartTime=$desde} -MaxEvents 20 -ErrorAction SilentlyContinue
         if ($evs) {
             foreach ($e in $evs) {
                 $nivel = @{1="CRITICO";2="ERRO";3="AVISO"}[[int]$e.Level]
@@ -856,9 +861,7 @@ function Invoke-ColetarLogs {
     Secao "10. EVENT LOG - APPLICATION (Erros/Avisos - ultimas 24h)"
     try {
         $desde = (Get-Date).AddHours(-24)
-        $evs = Get-WinEvent -LogName Application -ErrorAction SilentlyContinue |
-               Where-Object { $_.TimeCreated -ge $desde -and $_.Level -in @(1,2,3) } |
-               Select-Object -First 20
+        $evs = Get-WinEvent -FilterHashtable @{LogName='Application'; Level=1,2,3; StartTime=$desde} -MaxEvents 20 -ErrorAction SilentlyContinue
         if ($evs) {
             foreach ($e in $evs) {
                 $nivel = @{1="CRITICO";2="ERRO";3="AVISO"}[[int]$e.Level]
