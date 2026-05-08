@@ -191,20 +191,23 @@ function Get-PrimaryIP {
 # ==============================================================================
 # SISTEMA CACHE
 # ==============================================================================
-$Global:SystemInfo = @{}
+$Global:SystemInfo = @{ LastDynUpdate = [datetime]::MinValue }
 function Update-SystemCache {
+    param([switch]$Force)
     try {
-        # OS e CS sao estaticos — consulta apenas uma vez
         if (-not $Global:SystemInfo.OS) {
             $Global:SystemInfo.OS = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
         }
         if (-not $Global:SystemInfo.CS) {
             $Global:SystemInfo.CS = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
         }
-        # Disco, Rede e RebootPending sao dinamicos — atualiza sempre
-        $Global:SystemInfo.Disk = Get-PSDrive C -ErrorAction SilentlyContinue
-        $Global:SystemInfo.Net  = Get-PrimaryIP
-        $Global:SystemInfo.RebootPending = Test-RebootPending
+        # Disco, Rede e RebootPending: atualiza apenas se passaram 60s ou forcado apos tarefa
+        if ($Force -or ((Get-Date) - $Global:SystemInfo.LastDynUpdate).TotalSeconds -ge 60) {
+            $Global:SystemInfo.Disk = Get-PSDrive C -ErrorAction SilentlyContinue
+            $Global:SystemInfo.Net  = Get-PrimaryIP
+            $Global:SystemInfo.RebootPending = Test-RebootPending
+            $Global:SystemInfo.LastDynUpdate = Get-Date
+        }
     } catch {}
 }
 
@@ -362,8 +365,7 @@ function Show-Menu {
         "     Limpeza + Rede + Diagnostico (automatico)",
         "[A]  Manutencao Completa + Reboot",
         "     Igual ao [8] e reinicia automaticamente",
-        "[9]  Coleta de Logs Profundos",
-        "     Para analise por IA"
+        "[9]  Coleta de Logs Profundos"
     ) "Magenta"
 
     Write-UIMenu "Sistema" @(
@@ -444,20 +446,43 @@ function Invoke-Limpeza {
         } catch { Write-Erro "Erro em ${Nome}: $_"; return 0 }
     }
 
+    # [1/6] Cache de DNS
+    Write-Info "[1/6] Limpando cache de DNS..."
+    try { Clear-DnsClientCache; Write-Success "DNS: cache limpo." } catch { Write-Aviso "DNS: $_" }
+
+    # [2/6] Cache do Windows Update
+    Write-Info "[2/6] Limpando cache do Windows Update..."
+    try {
+        Stop-Service wuauserv -Force -ErrorAction SilentlyContinue
+        Remove-Item "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Start-Service wuauserv -ErrorAction SilentlyContinue
+        Write-Success "WU cache: limpo."
+    } catch { Write-Aviso "WU cache: $_" }
+
+    # [3/6] Pastas temporarias
+    Write-Info "[3/6] Limpando temporarios..."
     $total += LimparPasta "C:\Windows\Temp"                              "Windows\Temp"
     $total += LimparPasta "$env:USERPROFILE\AppData\Local\Temp"          "UserTemp"
-    $total += LimparPasta "C:\Windows\Prefetch"                          "Prefetch"
 
-    if (-not $Automatico) { Pause-Script "  Temp/Prefetch OK. Pressione qualquer tecla para Lixeira..." }
-    Write-Info "Esvaziando Lixeira..."
+    # [4/6] Prefetch e cache de miniaturas
+    Write-Info "[4/6] Limpando Prefetch e cache de miniaturas..."
+    $total += LimparPasta "C:\Windows\Prefetch"                          "Prefetch"
+    try {
+        Get-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache_*.db" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Success "Thumbcache: limpo."
+    } catch { Write-Aviso "Thumbcache: $_" }
+
+    # [5/6] Lixeira
+    Write-Info "[5/6] Esvaziando Lixeira..."
     try {
         $n = (New-Object -ComObject Shell.Application).Namespace(0xA).Items().Count
         Clear-RecycleBin -Force -ErrorAction Stop
         Write-Success "Lixeira: $n itens removidos."
     } catch { Write-Aviso "Lixeira: $_" }
 
-    if (-not $Automatico) { Pause-Script "  Lixeira OK. Pressione qualquer tecla para Event Logs..." }
-    Write-Info "Limpando logs de eventos..."
+    # [6/6] Event Logs
+    Write-Info "[6/6] Limpando logs de eventos..."
     try {
         $logs   = Get-WinEvent -ListLog * -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 }
         $limpos = 0
@@ -467,6 +492,7 @@ function Invoke-Limpeza {
         Write-Success "Event Logs: $limpos de $($logs.Count) limpos."
     } catch { Write-Erro "Erro nos logs: $_" }
 
+    Update-SystemCache -Force
     Show-Resumo "Limpeza" ([int]((Get-Date)-$t0).TotalSeconds) "$([math]::Round($total,2)) MB liberados"
     if (-not $Automatico) { Pause-Script }
 }
