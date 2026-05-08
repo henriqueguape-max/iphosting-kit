@@ -1,22 +1,21 @@
-# ipHosting Kit - Loader
-$url = 'https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1'
-
-Write-Progress -Activity "Baixando ipHosting Kit..." -Status "Aguarde"
-try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+# Este é o loader.ps1 que ficará hospedado no GitHub
+$scriptUrl = "https://raw.githubusercontent.com/henriqueguape-max/iphosting-kit/main/ipHosting-Manutencao.ps1"
+$rand = [Guid]::NewGuid().Guid
+$isAdmin = [bool]([Security.Principal.WindowsIdentity]::GetCurrent().Groups -match 'S-1-5-32-544')
+$tempPath = if ($isAdmin) { "$env:SystemRoot\Temp\IPH_$rand.ps1" } else { "$env:USERPROFILE\AppData\Local\Temp\IPH_$rand.ps1" }
 
 try {
-    $content = Invoke-RestMethod $url
-} catch {
-    Write-Host "Erro ao baixar o script: $_" -ForegroundColor Red
-    return
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Write-Host "Baixando e preparando ambiente da ipHosting..." -ForegroundColor Cyan
+    Invoke-RestMethod -Uri $scriptUrl -OutFile $tempPath
+
+    if ($isAdmin) {
+        Write-Host "Iniciando execucao em modo Administrador..." -ForegroundColor Green
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tempPath
+    } else {
+        Write-Host "Solicitando elevacao de privilegio (UAC)..." -ForegroundColor Yellow
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPath`"" -Verb RunAs -Wait
+    }
+} finally {
+    if (Test-Path $tempPath) { Remove-Item $tempPath -Force }
 }
-Write-Progress -Activity "Baixando ipHosting Kit..." -Completed
-
-# Grava no disco via Set-Content (sem Zone.Identifier — arquivo parece local)
-# GUID unico por execucao evita cache de hash do Defender
-$id  = [Guid]::NewGuid().Guid
-$tmp = "$env:TEMP\iphosting_$id.ps1"
-Set-Content -Path $tmp -Value "# $id`r`n$content" -Encoding UTF8
-
-# Roda via CMD -> PowerShell (contexto de processo limpo, sem historico de rede)
-Start-Process cmd -ArgumentList "/c powershell -NoProfile -ExecutionPolicy Bypass -File `"$tmp`" & timeout /t 5 /nobreak > nul & del `"$tmp`"" -Verb RunAs
