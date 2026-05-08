@@ -690,7 +690,7 @@ function Invoke-ManutencaoComReinicio {
 # MODULO 9 - COLETAR LOGS PARA IA
 # ==============================================================================
 function Invoke-ColetarLogs {
-    Show-Separador "MODULO 9 - COLETAR LOGS PARA ANALISE POR IA"
+    Show-Separador "MODULO 9 - COLETA DE LOGS PROFUNDOS PARA ANALISE"
 
     $relDir  = "$desktop\ipHosting-Logs\Relatorios"
     $relFile = "$relDir\Diagnostico_${env:COMPUTERNAME}_$(Get-Date -Format 'yyyy-MM-dd_HH-mm').txt"
@@ -735,7 +735,7 @@ function Invoke-ColetarLogs {
     $linhas.Add("║  Usuario : $env:USERNAME")
     $linhas.Add("║  Data    : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')")
     $linhas.Add("╠══════════════════════════════════════════════════════════════════════╣")
-    $linhas.Add("║  INSTRUCAO PARA IA:                                                  ║")
+    $linhas.Add("║  INSTRUCAO PARA ANALISE:                                              ║")
     $linhas.Add("║  Analise os logs abaixo e identifique:                               ║")
     $linhas.Add("║  1) Erros criticos ou recorrentes que causam instabilidade           ║")
     $linhas.Add("║  2) Drivers com problema que precisam de atualizacao                 ║")
@@ -829,13 +829,8 @@ function Invoke-ColetarLogs {
 
     # --- 8. PROCESSOS TOP CPU/RAM ---
     Write-Progress -Activity "Coletando Logs" -Status "Processos..." -PercentComplete 50
-    Secao "8. TOP 15 PROCESSOS (CPU + RAM)"
+    Secao "8. TOP 15 PROCESSOS (RAM)"
     try {
-        Linha "--- Por CPU (WorkingSet) ---"
-        Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 15 |
-            ForEach-Object { Linha ("  {0,-30} CPU:{1,8:F1}s  RAM:{2,6} MB" -f $_.Name, $_.CPU, [math]::Round($_.WorkingSet/1MB,1)) }
-        Linha ""
-        Linha "--- Por RAM ---"
         Get-Process -ErrorAction SilentlyContinue | Sort-Object WorkingSet -Descending | Select-Object -First 15 |
             ForEach-Object { Linha ("  {0,-30} RAM:{1,6} MB" -f $_.Name, [math]::Round($_.WorkingSet/1MB,1)) }
     } catch { Linha "Erro: $_" }
@@ -847,7 +842,7 @@ function Invoke-ColetarLogs {
         $desde = (Get-Date).AddHours(-24)
         $evs = Get-WinEvent -LogName System -ErrorAction SilentlyContinue |
                Where-Object { $_.TimeCreated -ge $desde -and $_.Level -in @(1,2,3) } |
-               Select-Object -First 50
+               Select-Object -First 20
         if ($evs) {
             foreach ($e in $evs) {
                 $nivel = @{1="CRITICO";2="ERRO";3="AVISO"}[[int]$e.Level]
@@ -863,7 +858,7 @@ function Invoke-ColetarLogs {
         $desde = (Get-Date).AddHours(-24)
         $evs = Get-WinEvent -LogName Application -ErrorAction SilentlyContinue |
                Where-Object { $_.TimeCreated -ge $desde -and $_.Level -in @(1,2,3) } |
-               Select-Object -First 50
+               Select-Object -First 20
         if ($evs) {
             foreach ($e in $evs) {
                 $nivel = @{1="CRITICO";2="ERRO";3="AVISO"}[[int]$e.Level]
@@ -878,7 +873,7 @@ function Invoke-ColetarLogs {
     try {
         $cbsPath = "C:\Windows\Logs\CBS\CBS.log"
         if (Test-Path $cbsPath) {
-            Get-Content $cbsPath -Tail 80 -ErrorAction SilentlyContinue | ForEach-Object { Linha $_ }
+            Get-Content $cbsPath -Tail 30 -ErrorAction SilentlyContinue | ForEach-Object { Linha $_ }
         } else { Linha "CBS.log nao encontrado (SFC pode nunca ter sido executado)." }
     } catch { Linha "Erro: $_" }
 
@@ -888,7 +883,7 @@ function Invoke-ColetarLogs {
     try {
         $dismPath = "C:\Windows\Logs\DISM\dism.log"
         if (Test-Path $dismPath) {
-            Get-Content $dismPath -Tail 50 -ErrorAction SilentlyContinue | ForEach-Object { Linha $_ }
+            Get-Content $dismPath -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Linha $_ }
         } else { Linha "DISM.log nao encontrado." }
     } catch { Linha "Erro: $_" }
 
